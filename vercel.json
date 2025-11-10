@@ -26,10 +26,5 @@
       "src": "/(.*)",
       "dest": "/frontend/dist/index.html"
     }
-  ],
-  "env": {
-    "ENCRYPTION_KEY": "@encryption_key",
-    "JWT_SECRET": "@jwt_secret",
-    "FRONTEND_URL": "@frontend_url"
-  }
+  ]
 }
