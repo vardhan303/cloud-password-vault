@@ -1,7 +1,7 @@
-import app from './app.js';
-import vaultRoutes from './routes/vault.js';
-import authRoutes from './routes/auth.js';
-import authMiddleware from './middleware/auth.js';
+import app from '../src/app.js';
+import vaultRoutes from '../src/routes/vault.js';
+import authRoutes from '../src/routes/auth.js';
+import authMiddleware from '../src/middleware/auth.js';
 
 // Root route
 app.get('/', (req, res) => {
@@ -37,10 +37,5 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// Start server
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`🚀 Cloud Password Vault API running on port ${PORT}`);
-});
-
+// Export for Vercel serverless
 export default app;

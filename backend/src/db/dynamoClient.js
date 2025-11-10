@@ -1,36 +1,38 @@
-import { PutItemCommand, GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
-import { dynamoDbDocClient, tableName } from '../config/aws.js';
+import { kv } from '@vercel/kv';
 
 /**
- * DynamoDB Data Access Layer for VaultEntries
+ * Vercel KV Data Access Layer for VaultEntries
  */
-class DynamoDBClient {
+class KVClient {
   /**
-   * Save a vault entry to DynamoDB
+   * Save a vault entry to Vercel KV
    * @param {Object} entry - The vault entry to save
    * @returns {Promise<Object>} The saved item
    */
   static async saveEntry(entry) {
-    const params = {
-      TableName: tableName,
-      Item: {
-        userId: { S: entry.userId },
-        entryId: { S: entry.entryId },
-        name: { S: entry.name },
-        encryptedDataKey: { S: entry.encryptedDataKey },
-        ciphertext: { S: entry.ciphertext },
-        iv: { S: entry.iv },
-        authTag: { S: entry.authTag },
-        createdAt: { S: new Date().toISOString() },
-        updatedAt: { S: new Date().toISOString() }
-      }
-    };
-
     try {
-      await dynamoDbDocClient.send(new PutItemCommand(params));
-      return entry;
+      const key = `vault:${entry.userId}:${entry.entryId}`;
+      const entryData = {
+        ...entry,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      await kv.set(key, JSON.stringify(entryData));
+      
+      // Also add to user's entry list
+      const listKey = `vault:${entry.userId}:list`;
+      const existingList = await kv.get(listKey);
+      const list = existingList ? JSON.parse(existingList) : [];
+      
+      if (!list.includes(entry.entryId)) {
+        list.push(entry.entryId);
+        await kv.set(listKey, JSON.stringify(list));
+      }
+      
+      return entryData;
     } catch (error) {
-      console.error('Error saving entry to DynamoDB:', error);
+      console.error('Error saving entry to KV:', error);
       throw new Error('Failed to save entry');
     }
   }
@@ -42,19 +44,12 @@ class DynamoDBClient {
    * @returns {Promise<Object|null>} The retrieved item or null if not found
    */
   static async getEntry(userId, entryId) {
-    const params = {
-      TableName: tableName,
-      Key: {
-        userId: { S: userId },
-        entryId: { S: entryId }
-      }
-    };
-
     try {
-      const result = await dynamoDbDocClient.send(new GetItemCommand(params));
-      return result.Item ? this.unmarshallItem(result.Item) : null;
+      const key = `vault:${userId}:${entryId}`;
+      const data = await kv.get(key);
+      return data ? JSON.parse(data) : null;
     } catch (error) {
-      console.error('Error retrieving entry from DynamoDB:', error);
+      console.error('Error retrieving entry from KV:', error);
       throw new Error('Failed to retrieve entry');
     }
   }
@@ -65,49 +60,36 @@ class DynamoDBClient {
    * @returns {Promise<Array>} Array of vault entries (metadata only)
    */
   static async listEntries(userId) {
-    const params = {
-      TableName: tableName,
-      KeyConditionExpression: 'userId = :userId',
-      ExpressionAttributeValues: {
-        ':userId': { S: userId }
-      },
-      ProjectionExpression: 'userId, entryId, name, createdAt, updatedAt'
-    };
-
     try {
-      const result = await dynamoDbDocClient.send(new QueryCommand(params));
-      return result.Items ? result.Items.map(item => this.unmarshallItem(item)) : [];
+      const listKey = `vault:${userId}:list`;
+      const list = await kv.get(listKey);
+      
+      if (!list) {
+        return [];
+      }
+      
+      const entryIds = JSON.parse(list);
+      const entries = [];
+      
+      for (const entryId of entryIds) {
+        const entry = await this.getEntry(userId, entryId);
+        if (entry) {
+          entries.push({
+            userId: entry.userId,
+            entryId: entry.entryId,
+            name: entry.name,
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt
+          });
+        }
+      }
+      
+      return entries;
     } catch (error) {
-      console.error('Error listing entries from DynamoDB:', error);
+      console.error('Error listing entries from KV:', error);
       throw new Error('Failed to list entries');
     }
   }
-
-  /**
-   * Convert DynamoDB item to plain JavaScript object
-   * @param {Object} item - The DynamoDB item
-   * @returns {Object} The unmarshalled item
-   */
-  static unmarshallItem(item) {
-    const unmarshalled = {};
-    for (const [key, value] of Object.entries(item)) {
-      // Extract the value based on DynamoDB data type
-      if (value.S !== undefined) {
-        unmarshalled[key] = value.S;
-      } else if (value.N !== undefined) {
-        unmarshalled[key] = Number(value.N);
-      } else if (value.BOOL !== undefined) {
-        unmarshalled[key] = value.BOOL;
-      } else if (value.L !== undefined) {
-        unmarshalled[key] = value.L.map(this.unmarshallItem);
-      } else if (value.M !== undefined) {
-        unmarshalled[key] = this.unmarshallItem(value.M);
-      } else {
-        unmarshalled[key] = value;
-      }
-    }
-    return unmarshalled;
-  }
 }
 
-export default DynamoDBClient;
+export default KVClient;

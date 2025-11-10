@@ -1,6 +1,6 @@
 import express from 'express';
 import EncryptionService from '../services/encryptionService.js';
-import DynamoDBClient from '../db/dynamoClient.js';
+import KVClient from '../db/dynamoClient.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
@@ -33,8 +33,8 @@ router.post('/create', async (req, res) => {
       ...encryptedData
     };
 
-    // Save to DynamoDB
-    await DynamoDBClient.saveEntry(entry);
+    // Save to Vercel KV
+    await KVClient.saveEntry(entry);
 
     // Return success response (without sensitive data)
     res.status(201).json({
@@ -70,8 +70,8 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    // Retrieve entry from DynamoDB
-    const entry = await DynamoDBClient.getEntry(userId, id);
+    // Retrieve entry from Vercel KV
+    const entry = await KVClient.getEntry(userId, id);
     
     if (!entry) {
       return res.status(404).json({ 
@@ -80,10 +80,9 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    // Prepare encrypted data for decryption
+    // Prepare encrypted data for decryption (no encryptedDataKey needed)
     const encryptedData = {
       ciphertext: entry.ciphertext,
-      encryptedDataKey: entry.encryptedDataKey,
       iv: entry.iv,
       authTag: entry.authTag
     };
@@ -117,8 +116,8 @@ router.get('/', async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // List entries from DynamoDB
-    const entries = await DynamoDBClient.listEntries(userId);
+    // List entries from Vercel KV
+    const entries = await KVClient.listEntries(userId);
 
     // Return list of entries (metadata only)
     res.status(200).json({

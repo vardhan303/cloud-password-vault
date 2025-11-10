@@ -5,28 +5,8 @@
 
 import EncryptionService from './encryptionService.js';
 
-// Mock AWS KMS client for testing
-const mockKmsClient = {
-  send: async (command) => {
-    if (command.constructor.name === 'GenerateDataKeyCommand') {
-      // Return a mock data key response
-      return {
-        Plaintext: Buffer.from('mock-plaintext-data-key-32-bytes-long'),
-        CiphertextBlob: Buffer.from('mock-encrypted-data-key')
-      };
-    } else if (command.constructor.name === 'DecryptCommand') {
-      // Return a mock decrypt response
-      return {
-        Plaintext: Buffer.from('mock-plaintext-data-key-32-bytes-long')
-      };
-    }
-  }
-};
-
-// Replace the actual KMS client with the mock for testing
-// In a real test environment, you would use a proper mocking library
-const originalKmsClient = global.kmsClient;
-global.kmsClient = mockKmsClient;
+// Set a test encryption key
+process.env.ENCRYPTION_KEY = 'test-encryption-key-for-testing-purposes-must-be-32-chars'
 
 async function testEncryptionService() {
   console.log('Testing EncryptionService...');
@@ -53,9 +33,6 @@ async function testEncryptionService() {
     }
   } catch (error) {
     console.error('❌ EncryptionService test FAILED with error:', error);
-  } finally {
-    // Restore the original KMS client
-    global.kmsClient = originalKmsClient;
   }
 }
 
